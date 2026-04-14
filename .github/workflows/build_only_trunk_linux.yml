@@ -38,6 +38,6 @@ jobs:
     with:
       java: 17
       branch: trunk
-      os: ubuntu_24
+      os: ubuntu_24_aarch64
       runner-os: linux
       jobs: '[ "build-only" ]'
