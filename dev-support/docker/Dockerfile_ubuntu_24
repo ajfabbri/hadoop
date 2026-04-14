@@ -50,8 +50,9 @@ RUN apt-get -q update \
     && wget -q -O - https://packages.adoptium.net/artifactory/api/gpg/key/public > /etc/apt/trusted.gpg.d/adoptium.asc  \
     && apt-get -q update \
     && apt-get -q install -y --no-install-recommends $(pkg-resolver/resolve.py ubuntu:noble) \
-    && apt-get clean \
-    && update-java-alternatives -s java-1.17.0-openjdk-amd64 \
+    && apt-get clean
+
+RUN update-java-alternatives -s java-1.17.0-openjdk-amd64 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN locale-gen en_US.UTF-8
