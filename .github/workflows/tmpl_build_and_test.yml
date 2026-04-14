@@ -34,6 +34,11 @@ on:
         type: string
         description: Operating system to run the build on
         default: ubuntu_24
+      runner-os:
+        required: false
+        type: string
+        description: Operating system for github action runner
+        default: linux
       jobs:
         required: true
         type: string
@@ -62,7 +67,7 @@ env:
 jobs:
   precondition:
     name: Preparation
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-os }}
     outputs:
       infra_image_url: ${{ steps.variables.outputs.infra_image_url }}
     steps:
@@ -72,7 +77,7 @@ jobs:
           echo "infra_image_url=ghcr.io/${{ github.repository }}/gha-${{ inputs.os }}:${{ inputs.branch }}" >> $GITHUB_OUTPUT
   infra-image:
     name: Infra Image ${{ inputs.os }}-${{ inputs.branch }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-os }}
     needs: [ precondition ]
     permissions:
       packages: write
@@ -124,7 +129,7 @@ jobs:
   build-only:
     name: Build Only (Java ${{ inputs.java }}) ${{ inputs.os }}-${{ inputs.branch }}
     if: (!cancelled()) && contains(fromJSON(inputs.jobs), 'build-only')
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner-os }}
     needs: [ precondition, infra-image ]
     container:
       image: ${{ needs.precondition.outputs.infra_image_url }}
