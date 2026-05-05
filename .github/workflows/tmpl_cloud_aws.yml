@@ -63,6 +63,9 @@ jobs:
         with:
           branch: ${{ inputs.branch }}
           os: ${{ inputs.os }}
+      - name: debug base_image_url
+        run: |
+          echo "precondition url: ${{ steps.img.outputs.build_image_url }}"
 
   build-image:
     runs-on: ubuntu-24.04
@@ -72,6 +75,9 @@ jobs:
     outputs:
       uid: ${{ steps.build_img.outputs.uid }}
     steps:
+      - name: debug build url
+        run: |
+          echo "Build image URL: ${{ needs.precondition.outputs.build_image_url }}"
       - uses: actions/checkout@v6
       - uses: ./.github/actions/build_image
         id: build_img
