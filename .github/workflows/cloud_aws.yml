@@ -28,10 +28,17 @@ on:
 
 jobs:
   run-aws-integration:
+    # Security: write privileges are needed to update PR status and upload test results.
+    # Package write is for building toolchain container images on demand, but ghcr.io access is
+    # scoped to the repository the actions run on.
     permissions:
       packages: write
+      checks: write
+      contents: read
     name: Run
     uses: ./.github/workflows/tmpl_cloud_aws.yml
+    secrets: inherit    # inherit LOCALSTACK_CI_KEY
     with:
       java: 25
       os: ubuntu_24
+      runner_os: ubuntu-24.04
