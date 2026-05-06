@@ -27,7 +27,7 @@ on:
       branch:
         required: false
         type: string
-        description: Branch to run the build against
+        description: Branch to use for toolchain image build
         default: trunk
       os:
         required: false
@@ -66,13 +66,15 @@ jobs:
       - uses: ./.github/actions/build_image_url
         id: img
         with:
-          branch: ${{ inputs.branch }}
+          fetch-depth: 0
           os: ${{ inputs.os }}
+          branch: ${{ inputs.branch }}
       - name: debug base_image_url
         run: |
           echo "precondition url: ${{ steps.img.outputs.build_image_url }}"
 
   build-image:
+    name: Build toolchain image (JDK${{ inputs.java }}, ${{ inputs.os }}-${{ inputs.branch }})
     runs-on: ${{ inputs.runner_os }}
     needs: [ precondition ]
     permissions:
@@ -105,7 +107,7 @@ jobs:
         ports:
           - 4566:4566
         env:
-          SERVICES: s3
+          SERVICES: s3,kms
           AWS_DEFAULT_REGION: us-west-2
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
@@ -134,7 +136,9 @@ jobs:
 
       - name: Maven Build
         shell: bash
-        run: ./mvnw install -B -DskipTests -am -pl hadoop-tools/hadoop-aws
+        run: |
+          ./mvnw -B --no-transfer-progress -DskipTests -am -pl hadoop-tools/hadoop-aws \
+            -Dmaven.javadoc.skip install
 
       - name: Save build cache
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
