@@ -140,6 +140,14 @@ jobs:
           ./mvnw -B --no-transfer-progress -DskipTests -am -pl hadoop-tools/hadoop-aws \
             -Dmaven.javadoc.skip install
 
+      - name: Check local maven repository
+        shell: bash
+        run: |
+          if [ -d ~/.m2/repository ]; then
+            echo "👍 Maven repository at ~/.m2/repository"
+          else
+            echo "Maven repository directory not found."
+          fi
       - name: Save build cache
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         if: always() && !cancelled()
