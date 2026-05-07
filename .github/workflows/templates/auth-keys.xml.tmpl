@@ -18,7 +18,8 @@
   </property>
   <property>
     <name>fs.s3a.endpoint</name>
-    <value>http://s3.hadoop-ci.localstack:4566</value>
+    <!-- hostname alias and /etc/hosts entry configured in tmpl_cloud_aws.yml -->
+    <value>http://s3.localstack:4566</value>
   </property>
   <!-- localstack needs path style access, or virtual-hosted style (above)
   <property>

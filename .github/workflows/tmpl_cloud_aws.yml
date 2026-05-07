@@ -63,10 +63,12 @@ jobs:
       build_image_url: ${{ steps.img.outputs.build_image_url }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Full fetch so build image URL can be computed for any branch
+          fetch-depth: 0
       - uses: ./.github/actions/build_image_url
         id: img
         with:
-          fetch-depth: 0
           os: ${{ inputs.os }}
           branch: ${{ inputs.branch }}
       - name: debug base_image_url
@@ -112,9 +114,21 @@ jobs:
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
           LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_CI_KEY }}
+          LOCALSTACK_HOST: s3.localstack
+        # minimize blocking for localstack readiness: it typically takes less
+        # than a minute, and the Maven build that runs first takes longer than that.
+        options: >-
+          --health-cmd "exit 0"
+          --health-interval 1s
+          --health-retries 1
+          --network-alias s3.localstack
+
     container:
       image: ${{ needs.precondition.outputs.build_image_url }}
-      options: --user ${{ needs.build-image.outputs.uid }}
+      options: >-
+        --user ${{ needs.build-image.outputs.uid }}
+    env:
+      MAVEN_OPTS: -Dmaven.repo.local=.m2/repository
     steps:
       - uses: actions/checkout@v6
       - name: Restore build cache
@@ -122,7 +136,7 @@ jobs:
         uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
-            ~/.m2/repository/
+            .m2/repository/
           key: ${{ inputs.os }}-maven-${{ hashFiles('**/pom.xml') }}-${{ inputs.branch }}
           # falls back to less-specific caches if exact key not found
           restore-keys: |
@@ -137,23 +151,26 @@ jobs:
       - name: Maven Build
         shell: bash
         run: |
-          ./mvnw -B --no-transfer-progress -DskipTests -am -pl hadoop-tools/hadoop-aws \
-            -Dmaven.javadoc.skip install
+          mkdir -p .m2/repository
+          ./mvnw -B -T 1C --no-transfer-progress -DskipTests -am -pl hadoop-tools/hadoop-aws \
+            -Dmaven.javadoc.skip -Dcheckstyle.skip -Dspotbugs.skip -Denforcer.skip -Drat.skip install
 
       - name: Check local maven repository
         shell: bash
         run: |
-          if [ -d ~/.m2/repository ]; then
-            echo "👍 Maven repository at ~/.m2/repository"
+          if [ -d ".m2/repository" ]; then
+            echo "👍 Maven repository at $(pwd)/.m2/repository"
           else
-            echo "Maven repository directory not found."
+            echo "👎 .m2/repository not found in $(pwd)"
+            exit 1
           fi
+
       - name: Save build cache
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        if: always() && !cancelled()
+        if: always() && !cancelled() && steps.restore_cache.outputs.cache-hit != 'true'
         with:
           path: |
-            ~/.m2/repository/
+            .m2/repository/
           key: ${{ steps.restore_cache.outputs.cache-primary-key }}
 
       - name: Create localstack s3 bucket
@@ -161,6 +178,14 @@ jobs:
         run: |
           # Use curl to interact with localstack if awslocal is not in the container
           curl -X PUT "http://localstack:4566/${{ env.BUCKET_NAME }}"
+
+      - name: Register bucket hostname
+        shell: bash
+        run: |
+          # Resolve s3.localstack IP and add entry for virtual-hosted bucket FQDN
+          LSIP=$(getent hosts s3.localstack | awk '{print $1}')
+          echo "Registering ${{ env.BUCKET_NAME }}.s3.localstack as ${LSIP}"
+          echo "${LSIP} ${{ env.BUCKET_NAME }}.s3.localstack" | sudo tee -a /etc/hosts
 
       - name: S3A Integration Tests
         shell: bash
@@ -173,9 +198,11 @@ jobs:
           cp .github/workflows/templates/auth-keys.xml.tmpl \
             hadoop-tools/hadoop-aws/src/test/resources/auth-keys.xml
           ./mvnw verify -B -pl hadoop-tools/hadoop-aws \
+            -Dparallel-tests \
             -DskipITs=false \
             -Dtest=none \
             -Dscale=true \
+            -Dcheckstyle.skip -Dspotbugs.skip -Denforcer.skip -Drat.skip \
             -Dfailsafe.excludesFile=$PWD/.github/gha-tests/hadoop-aws-excludes.txt
 
       - name: Upload Test Reports

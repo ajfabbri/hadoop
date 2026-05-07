@@ -49,4 +49,4 @@ jobs:
           only-summary: 'false'
           list-suites: 'failed'
           list-tests: 'failed'
-          fail-on-error: 'false'
+          fail-on-error: 'true'
