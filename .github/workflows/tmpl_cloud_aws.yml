@@ -128,7 +128,12 @@ jobs:
       options: >-
         --user ${{ needs.build-image.outputs.uid }}
     env:
-      MAVEN_OPTS: -Dmaven.repo.local=.m2/repository
+      # mvn verify doesn't return failure exit code due to HADOOP-18040
+      # (which seems incorrect, but let's just override this for now)
+      MAVEN_OPTS: >-
+        -Dmaven.test.failure.ignore=false
+        -Dmaven.repo.local=.m2/repository
+        -Dcheckstyle.skip -Dspotbugs.skip -Denforcer.skip -Drat.skip
     steps:
       - uses: actions/checkout@v6
       - name: Restore build cache
@@ -202,7 +207,6 @@ jobs:
             -DskipITs=false \
             -Dtest=none \
             -Dscale=true \
-            -Dcheckstyle.skip -Dspotbugs.skip -Denforcer.skip -Drat.skip \
             -Dfailsafe.excludesFile=$PWD/.github/gha-tests/hadoop-aws-excludes.txt
 
       - name: Upload Test Reports
