@@ -37,7 +37,7 @@ jobs:
         with:
           artifact: /s3a-test-reports-java-.*/  # see tmpl_cloud_aws.yml
           name: S3A Integration Tests
-          path: "**/*.xml"
+          path: "**/TEST-*.xml"
           reporter: java-junit
           only-summary: 'false'
           use-actions-summary: 'true'
