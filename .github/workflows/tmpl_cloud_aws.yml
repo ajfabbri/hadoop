@@ -101,7 +101,7 @@ jobs:
     runs-on: ${{ inputs.runner_os }}
     permissions:
       # Security: Minimal permissions for the test runner. Reporting happens in
-      # report_aws.yml.
+      # report_cloud_aws.yml.
       contents: read
     services:
       localstack:
