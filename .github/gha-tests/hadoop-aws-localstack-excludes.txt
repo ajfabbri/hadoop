@@ -19,7 +19,7 @@
 **/org/apache/hadoop/fs/s3a/auth/delegation/ITestDelegatedMRJob.java
 **/org/apache/hadoop/fs/s3a/auth/delegation/ITestSessionDelegationInFilesystem.java
 **/org/apache/hadoop/fs/s3a/auth/delegation/ITestSessionDelegationTokens.java
-**/ITestS3ATemporaryCredentials.java
+#**/ITestS3ATemporaryCredentials.java
 
 
 # failures that need to be investigated
