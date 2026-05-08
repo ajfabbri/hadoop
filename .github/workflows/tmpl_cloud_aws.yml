@@ -101,7 +101,7 @@ jobs:
     runs-on: ${{ inputs.runner_os }}
     permissions:
       # Security: Minimal permissions for the test runner. Reporting happens in
-      # report_aws.yml.
+      # report_cloud_aws.yml.
       contents: read
     services:
       localstack:
@@ -207,7 +207,7 @@ jobs:
             -DskipITs=false \
             -Dtest=none \
             -Dscale=true \
-            -Dfailsafe.excludesFile=$PWD/.github/gha-tests/hadoop-aws-excludes.txt
+            -Dfailsafe.excludesFile=$PWD/.github/gha-tests/hadoop-aws-localstack-excludes.txt
 
       - name: Upload Test Reports
         uses: actions/upload-artifact@v4

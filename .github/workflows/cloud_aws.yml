@@ -25,6 +25,7 @@ on:
       - 'hadoop-tools/hadoop-aws/**'
       - '.github/workflows/*cloud_aws.yml'
       - '.github/actions/build_image**'
+      - '.github/gha-tests/hadoop-aws*excludes.txt'
 
 jobs:
   run-aws-integration:

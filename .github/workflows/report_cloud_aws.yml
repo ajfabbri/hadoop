@@ -32,22 +32,16 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.workflow_run.event == 'pull_request'
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: artifacts
-          pattern: s3a-test-reports-*
-
       - name: S3A Test Report
         uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2  # v3.0.0
         with:
           artifact: /s3a-test-reports-java-.*/  # see tmpl_cloud_aws.yml
           name: S3A Integration Tests
-          path: "*.xml"
+          path: "**/*.xml"
           reporter: java-junit
           only-summary: 'false'
+          use-actions-summary: 'true'
           list-suites: 'failed'
           list-tests: 'failed'
-          fail-on-error: 'true'
+          # list-files: 'none'
+          fail-on-error: 'true' # Do we want this?
