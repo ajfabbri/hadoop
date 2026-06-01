@@ -19,12 +19,8 @@
 
 name: "Cloud-AWS"
 
-# Security: write privileges are safe since this is triggered
-# only by `push` (implying user has write access).
 on:
-  push:
-    branches:
-      - "**"
+  pull_request:
     paths:
       - 'hadoop-tools/hadoop-aws/**'
       - '.github/workflows/*cloud_aws.yml'
@@ -33,8 +29,9 @@ on:
 
 jobs:
   run-aws-integration:
-    # Security: package write is needed to build toolchain container images on demand,
-    # but ghcr.io access is scoped to the repository the actions run on.
+    # Security: write privileges are needed to update PR status and upload test results.
+    # Package write is for building toolchain container images on demand, but ghcr.io access is
+    # scoped to the repository the actions run on.
     permissions:
       packages: write
       contents: read
