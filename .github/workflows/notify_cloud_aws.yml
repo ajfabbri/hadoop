@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-slim
     permissions:
       checks: write
-      issues: write
+      pull-requests: write
     steps:
       - name: Post approval-required check and sticky comment
         uses: actions/github-script@v9
@@ -51,16 +51,20 @@ jobs:
             const marker = '<!-- cloud-aws-fork-pr-note -->';
             const pr = context.payload.pull_request;
             const workflowUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/workflows/cloud_aws.yml`;
+            const dispatchCommand = `gh workflow run cloud_aws.yml -R ${context.repo.owner}/${context.repo.repo} -f pr_number=${pr.number}`;
 
+            const checkTitle = 'Maintainer action needed for S3A CI.';
             const checkSummary = [
-              'Cloud-AWS integration tests are not run automatically for fork pull requests.',
-              '',
-              'A maintainer needs to approve fork workflows and then manually trigger Cloud-AWS:',
-              `- Open [Cloud-AWS workflow](${workflowUrl})`,
-              `- Run workflow with \`pr_number=${pr.number}\``,
-              '',
-              `Fork head: \`${pr.head.repo.full_name}@${pr.head.sha.slice(0, 12)}\``,
-            ].join('\n');
+              'Cloud-AWS tests must be manually triggered for fork pull requests.',
+              'A maintainer should:\n',
+              '- Confirm the PR does not contain questionable changes to actions in',
+              '  .github/workflows.\n',
+              '- *Approve workflows* for this fork PR if prompted.\n',
+              `- Run [Cloud-AWS workflow](${workflowUrl}) with \`pr_number=${pr.number}\``,
+              `  (or via CLI: \`${dispatchCommand}\`)\n`,
+              '\n',
+              `fork head: \`${pr.head.repo.full_name}@${pr.head.sha.slice(0, 12)}\``,
+            ].join(' ');
 
             await github.rest.checks.create({
               owner: context.repo.owner,
@@ -70,47 +74,47 @@ jobs:
               status: 'completed',
               conclusion: 'action_required',
               output: {
-                title: 'Maintainer action required to run Cloud-AWS tests',
+                title: checkTitle,
                 summary: checkSummary,
               },
             });
 
             const commentBody = [
               marker,
-              '### Cloud-AWS integration tests require maintainer action',
-              '',
-              'This PR comes from a fork, so Cloud-AWS tests are not started automatically.',
-              '',
-              'A maintainer can run them as follows:',
-              '1. Approve workflows for this fork PR if prompted by GitHub.',
-              `2. Open [Cloud-AWS workflow](${workflowUrl}) and click **Run workflow**.`,
-              `3. Set \`pr_number\` to \`${pr.number}\` (other inputs can stay at defaults).`,
-              '',
-              `Current fork head: \`${pr.head.repo.full_name}@${pr.head.sha.slice(0, 12)}\``,
+              `**${checkTitle}** ${checkSummary}`,
             ].join('\n');
 
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr.number,
-              per_page: 100,
-            });
-
-            const existing = comments.find(comment => comment.body && comment.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body: commentBody,
-              });
-              core.info(`Updated sticky comment ${existing.id}`);
-            } else {
-              const created = await github.rest.issues.createComment({
+            try {
+              const comments = await github.paginate(github.rest.issues.listComments, {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: pr.number,
-                body: commentBody,
+                per_page: 100,
               });
-              core.info(`Created sticky comment ${created.data.id}`);
+
+              const existing = comments.find(comment => comment.body && comment.body.includes(marker));
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                  body: commentBody,
+                });
+                core.info(`Updated sticky comment ${existing.id}`);
+              } else {
+                const created = await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: commentBody,
+                });
+                core.info(`Created sticky comment ${created.data.id}`);
+              }
+            } catch (error) {
+              if (error.status === 403) {
+                core.warning('Unable to write sticky PR comment due to repo token policy.');
+                core.warning(`GitHub API message: ${error.message}`);
+              } else {
+                throw error;
+              }
             }
