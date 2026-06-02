@@ -53,6 +53,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-slim
     permissions:
+      actions: write
       pull-requests: read
     outputs:
       head_repo: ${{ steps.pr.outputs.head_repo }}
@@ -82,6 +83,24 @@ jobs:
             core.setOutput('head_sha', pr.head.sha);
 
             console.log(`Resolved PR #${prNumber}: ${pr.head.repo.full_name}@${pr.head.sha}`);
+
+      - name: Write manual target metadata
+        shell: bash
+        run: |
+          cat > manual-target.json <<EOF
+          {
+            "pr_number": "${{ inputs.pr_number }}",
+            "head_repo": "${{ steps.pr.outputs.head_repo }}",
+            "head_sha": "${{ steps.pr.outputs.head_sha }}"
+          }
+          EOF
+
+      - name: Upload manual target metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-aws-manual-target
+          path: manual-target.json
+          retention-days: 7
 
   run-aws-integration:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
@@ -116,44 +135,3 @@ jobs:
       runner_os: ${{ inputs.runner_os }}
       checkout_repository: ${{ needs.resolve-fork-pr.outputs.head_repo }}
       checkout_ref: ${{ needs.resolve-fork-pr.outputs.head_sha }}
-
-  report-manual-summary:
-    if: ${{ always() && github.event_name == 'workflow_dispatch' && needs.resolve-fork-pr.result == 'success' }}
-    needs: [ resolve-fork-pr, run-aws-integration-manual ]
-    runs-on: ubuntu-slim
-    permissions:
-      statuses: write
-    steps:
-      - name: Post S3A commit status for manual run
-        uses: actions/github-script@v9
-        env:
-          HEAD_SHA: ${{ needs.resolve-fork-pr.outputs.head_sha }}
-          RUN_RESULT: ${{ needs.run-aws-integration-manual.result }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        with:
-          script: |
-            const result = process.env.RUN_RESULT;
-            let state = 'error';
-            let description = 'Manual Cloud-AWS run did not complete';
-
-            if (result === 'success') {
-              state = 'success';
-              description = 'Manual Cloud-AWS run passed';
-            } else if (result === 'failure') {
-              state = 'failure';
-              description = 'Manual Cloud-AWS run failed';
-            } else if (result === 'cancelled') {
-              description = 'Manual Cloud-AWS run cancelled';
-            } else if (result === 'skipped') {
-              description = 'Manual Cloud-AWS run skipped';
-            }
-
-            await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: process.env.HEAD_SHA,
-              state,
-              description,
-              context: 'S3A Test Summary',
-              target_url: process.env.RUN_URL,
-            });
