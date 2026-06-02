@@ -26,9 +26,65 @@ on:
       - '.github/workflows/*cloud_aws.yml'
       - '.github/actions/build_image**'
       - '.github/gha-tests/hadoop-aws*excludes.txt'
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number from a fork repository
+        required: true
+        type: string
+      java:
+        description: Java version for the Cloud-AWS run
+        required: false
+        type: string
+        default: '25'
+      os:
+        description: OS image key for the test container
+        required: false
+        type: string
+        default: ubuntu_24
+      runner_os:
+        description: Runner label used to execute jobs
+        required: false
+        type: string
+        default: ubuntu-24.04
 
 jobs:
+  resolve-fork-pr:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-slim
+    permissions:
+      pull-requests: read
+    outputs:
+      head_repo: ${{ steps.pr.outputs.head_repo }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
+    steps:
+      - name: Resolve PR head SHA and repository
+        id: pr
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const prNumber = Number('${{ inputs.pr_number }}');
+            if (!Number.isInteger(prNumber) || prNumber <= 0) {
+              throw new Error(`Invalid pull request number: '${{ inputs.pr_number }}'`);
+            }
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+
+            if (!pr.head.repo.fork) {
+              throw new Error(`PR #${prNumber} is not from a fork repository. Use the pull_request-triggered Cloud-AWS workflow instead.`);
+            }
+
+            core.setOutput('head_repo', pr.head.repo.full_name);
+            core.setOutput('head_sha', pr.head.sha);
+
+            console.log(`Resolved PR #${prNumber}: ${pr.head.repo.full_name}@${pr.head.sha}`);
+
   run-aws-integration:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     # Security: write privileges are needed to update PR status and upload test results.
     # Package write is for building toolchain container images on demand, but ghcr.io access is
     # scoped to the repository the actions run on.
@@ -37,8 +93,67 @@ jobs:
       contents: read
     name: Run
     uses: ./.github/workflows/tmpl_cloud_aws.yml
-    secrets: inherit    # inherit LOCALSTACK_CI_KEY
+    secrets:
+      LOCALSTACK_CI_KEY: ${{ secrets.LOCALSTACK_CI_KEY }}
     with:
       java: 25
       os: ubuntu_24
       runner_os: ubuntu-24.04
+
+  run-aws-integration-manual:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [ resolve-fork-pr ]
+    permissions:
+      packages: write
+      contents: read
+    name: Run (manual fork PR)
+    uses: ./.github/workflows/tmpl_cloud_aws.yml
+    secrets:
+      LOCALSTACK_CI_KEY: ${{ secrets.LOCALSTACK_CI_KEY }}
+    with:
+      java: ${{ inputs.java }}
+      os: ${{ inputs.os }}
+      runner_os: ${{ inputs.runner_os }}
+      checkout_repository: ${{ needs.resolve-fork-pr.outputs.head_repo }}
+      checkout_ref: ${{ needs.resolve-fork-pr.outputs.head_sha }}
+
+  report-manual-summary:
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && needs.resolve-fork-pr.result == 'success' }}
+    needs: [ resolve-fork-pr, run-aws-integration-manual ]
+    runs-on: ubuntu-slim
+    permissions:
+      statuses: write
+    steps:
+      - name: Post S3A commit status for manual run
+        uses: actions/github-script@v9
+        env:
+          HEAD_SHA: ${{ needs.resolve-fork-pr.outputs.head_sha }}
+          RUN_RESULT: ${{ needs.run-aws-integration-manual.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const result = process.env.RUN_RESULT;
+            let state = 'error';
+            let description = 'Manual Cloud-AWS run did not complete';
+
+            if (result === 'success') {
+              state = 'success';
+              description = 'Manual Cloud-AWS run passed';
+            } else if (result === 'failure') {
+              state = 'failure';
+              description = 'Manual Cloud-AWS run failed';
+            } else if (result === 'cancelled') {
+              description = 'Manual Cloud-AWS run cancelled';
+            } else if (result === 'skipped') {
+              description = 'Manual Cloud-AWS run skipped';
+            }
+
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: process.env.HEAD_SHA,
+              state,
+              description,
+              context: 'S3A Test Summary',
+              target_url: process.env.RUN_URL,
+            });
